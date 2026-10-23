@@ -36,3 +36,6 @@ PWA personnelle Longchamp / Grande Plage, Saint-Lunaire.
 
 ## Publication
 GitHub Pages : Settings > Pages > Deploy from branch > main / root.
+
+## Audit API et bathymétrie (2026-10-23)
+Outils de contrôle dans l'onglet Spots et couche bathymétrique EMODnet dans la Carte. Tests unitaires : `node tests/audit.test.js` et `node tests/bathymetry.test.js`. Rapport : [docs/model-audit.md](docs/model-audit.md). Aucun profil bathymétrique local validé à ce jour ; aucun effet de profondeur n'est appliqué au score.
