@@ -24,8 +24,8 @@ async function load(){try{
  const fields='wave_height,wave_period,wave_direction,swell_wave_height,swell_wave_period,swell_wave_direction,wind_wave_height,sea_level_height_msl';
  const names=['meteofrance_wave','dwd_ewam','ecmwf_wam','ncep_gfswave025'];
  const results=await Promise.allSettled([...names.map(model=>api('https://marine-api.open-meteo.com/v1/marine?'+q+'&hourly='+fields+'&models='+model)),api('https://marine-api.open-meteo.com/v1/marine?'+q+'&hourly='+fields),api('https://api.open-meteo.com/v1/forecast?'+q+'&hourly=wind_speed_10m,wind_direction_10m')]);
- const models=results.slice(0,4).map((x,i)=>x.status==='fulfilled'&&x.value.hourly?{name:names[i],data:x.value.hourly}:null).filter(Boolean);
- const fallback=results[4].status==='fulfilled'?results[4].value.hourly:null;
+ const models=results.slice(0,4).map((x,i)=>x.status==='fulfilled'&&InwavesAudit.validHourly(x.value).ok?{name:names[i],data:x.value.hourly}:null).filter(Boolean);
+ const fallback=results[4].status==='fulfilled'&&InwavesAudit.validHourly(results[4].value).ok?results[4].value.hourly:null;
  const wind=results[5].status==='fulfilled'?results[5].value.hourly:null;
  if(!wind||(!models.length&&!fallback))throw Error('Données insuffisantes');
  const ref=fallback||models[0].data,windIndex=new Map(wind.time.map((t,i)=>[t,i]));
@@ -34,14 +34,14 @@ async function load(){try{
  const avg=x=>x.length?x.reduce((a,b)=>a+b,0)/x.length:null;
  rows=ref.time.map((time,i)=>{
   const j=windIndex.get(time);
-  const samples=maps.map(m=>{const n=m.index.get(time);return n===undefined?null:{wave:val(m.data,'wave_height',n),period:val(m.data,'wave_period',n),direction:val(m.data,'wave_direction',n),swell:val(m.data,'swell_wave_height',n),swellPeriod:val(m.data,'swell_wave_period',n),swellDir:val(m.data,'swell_wave_direction',n),windWave:val(m.data,'wind_wave_height',n)}}).filter(Boolean);
+  const samples=maps.map(m=>{const n=m.index.get(time);return n===undefined?null:{wave:val(m.data,'wave_height',n),period:val(m.data,'wave_period',n),direction:val(m.data,'wave_direction',n),swell:val(m.data,'swell_wave_height',n),swellPeriod:val(m.data,'swell_wave_period',n),swellDir:val(m.data,'swell_wave_direction',n),windWave:val(m.data,'wind_wave_height',n)}}).filter(x=>x&&Number.isFinite(x.wave));
   const number=(key,backup)=>avg(samples.map(x=>x[key]).filter(Number.isFinite))??val(ref,backup,i);
   const dirs=samples.map(x=>x.swellDir).filter(Number.isFinite);
   const bearing=dirs.length?(Math.atan2(avg(dirs.map(d=>Math.sin(d*Math.PI/180))),avg(dirs.map(d=>Math.cos(d*Math.PI/180))))*180/Math.PI+360)%360:null;
   const heights=samples.map(x=>x.wave).filter(Number.isFinite),mean=avg(heights);
   return {time,wave:number('wave','wave_height'),period:number('period','wave_period'),direction:number('direction','wave_direction'),swell:number('swell','swell_wave_height'),swellPeriod:number('swellPeriod','swell_wave_period'),swellDir:bearing??val(ref,'swell_wave_direction',i),windWave:number('windWave','wind_wave_height'),sea:val(ref,'sea_level_height_msl',i),wind:j===undefined?null:val(wind,'wind_speed_10m',j),windDir:j===undefined?null:val(wind,'wind_direction_10m',j),memberCount:heights.length,spread:heights.length>1?Math.sqrt(avg(heights.map(h=>(h-mean)**2))):null};
  });
- if(!rows.length)throw Error('Aucune prévision');
+ if(!rows.length||!rows.some(r=>Number.isFinite(r.wave)))throw Error('Aucune prévision de houle exploitable');
  for(let k=0;k<rows.length;k++){const before=rows[Math.max(0,k-1)].sea,after=rows[Math.min(rows.length-1,k+1)].sea;rows[k].tideRate=Number.isFinite(before)&&Number.isFinite(after)?(after-before)/(k===0||k===rows.length-1?1:2):null;}
  const now=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Paris',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).format(new Date()).replace(' ','T');
  idx=Math.max(0,rows.findIndex(x=>x.time>=now));chosenDay=rows[idx].time.slice(0,10);render();
